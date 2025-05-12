@@ -1,0 +1,49 @@
+import streamlit as st
+import pandas as pd
+import joblib
+import json
+
+# Page setup
+st.set_page_config(page_title="📘 Teacher Shortage Recommendation", layout="wide")
+
+st.title("📘 AI-Powered Teacher Shortage Advisor (Kenya)")
+st.markdown("Use this tool to get a subject-specific staffing recommendation for any secondary school.")
+
+# Load pre-processed school output data (from your notebook)
+@st.cache_data
+def load_data():
+    return pd.read_csv("final_school_output.csv")  # Replace with your actual file name or GitHub raw URL
+
+df = load_data()
+school_names = df['Institution_Name'].unique()
+
+# School selection
+school_name = st.selectbox("🏫 Select a School", options=school_names)
+
+# Display results
+if school_name:
+    school = df[df['Institution_Name'] == school_name].iloc[0]
+
+    st.subheader(f"🏫 {school_name}")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("📊 Enrollment", int(school['Enrollment']))
+    col2.metric("👨‍🏫 Teachers on Duty", int(school['TOD']))
+    col3.metric("📐 Policy CBE Required", int(school['PolicyCBE']))
+
+    st.markdown("---")
+
+    # Display actual teachers per subject
+    st.markdown("### ✅ Actual Teachers per Subject")
+    actuals = json.loads(school['ActualTeachers'].replace("'", '"'))  # ensure it's valid JSON
+    st.dataframe(pd.DataFrame(actuals.items(), columns=["Subject", "Number of Teachers"]))
+
+    # Display shortages
+    st.markdown("### 🚨 Subject Shortages")
+    shortages = json.loads(school['SubjectShortages'].replace("'", '"'))
+    shortage_df = pd.DataFrame(shortages.items(), columns=["Subject", "Shortage"])
+    shortage_df = shortage_df[shortage_df['Shortage'] > 0]
+    st.dataframe(shortage_df)
+
+    # Display recommendation
+    st.markdown("### 🧠 AI Recommendation")
+    st.success(school['Recommendation'])
