@@ -1,14 +1,20 @@
 import streamlit as st
 import pandas as pd
-from collections import Counter
 import math
+from collections import Counter
 
-# --- Load & preprocess data ---
-csv_url = "https://raw.githubusercontent.com/H-AYAH/Teachershortage-app/main/SchoolsSecondary_11.csv"
-df = pd.read_csv(csv_url)
-df = df.groupby('Institution_Name').agg(list).reset_index()
+# --- Custom CSS ---
+st.markdown("""
+    <style>
+    .main {background-color: #f9f9f9;}
+    .header {padding: 20px; background: #00467F; color: white; border-radius: 10px;}
+    .metric-box {padding: 15px; background: white; border-radius: 10px; margin: 10px 0; box-shadow: 0 2px 5px rgba(0,0,0,0.1);}
+    .recommendation {background: #e8f4ff; padding: 15px; border-left: 4px solid #00467F; margin: 20px 0;}
+    .shortage {color: #ff4444; font-weight: bold;}
+    </style>
+""", unsafe_allow_html=True)
 
-# --- Subject lesson policy setup ---
+# --- Constants ---
 subject_lessons = {
     'English': 5,
     'Kiswahili/kenya sign language': 4,
@@ -20,11 +26,7 @@ subject_lessons = {
     'Agriculture and Nutrition': 4,
     'Creative Arts and Sports': 5
 }
-
 subject_teacher_per_class = {subj: lessons / 27 for subj, lessons in subject_lessons.items()}
-TOTAL_WEEKLY_LESSONS_PER_CLASS = sum(subject_lessons.values()) + 1  # +1 for PPI
-
-# --- Subject name mapping ---
 subject_mapping = {
     "ENGLISH": "English",
     "KISWAHILI/ KSL": "Kiswahili/kenya sign language",
@@ -40,6 +42,13 @@ subject_mapping = {
     "NUTRITION": "Agriculture and Nutrition"
 }
 
+# --- Load Data ---
+@st.cache_data
+def load_data():
+    url = "https://raw.githubusercontent.com/H-AYAH/Teachershortage-app/main/SchoolsSecondary_11.csv"
+    df = pd.read_csv(url)
+    return df.groupby('Institution_Name').agg(list).reset_index()
+
 def normalize_subjects(subjects):
     normalized = []
     for subj in subjects:
@@ -49,110 +58,111 @@ def normalize_subjects(subjects):
             normalized.append(mapped)
     return normalized
 
-# --- Helper to safely extract scalar from list ---
-def get_first_valid_value(lst):
-    if isinstance(lst, list):
-        for val in lst:
-            if pd.notna(val):
-                return val
-    elif pd.notna(lst):
-        return lst
+def get_first_valid_value(val):
+    if isinstance(val, list):
+        for v in val:
+            if pd.notna(v):
+                return v
+    elif pd.notna(val):
+        return val
     return 0
 
-# --- Shortage Calculation ---
-def calculate_subject_shortage_full_output(school_row):
-    enrollment = int(get_first_valid_value(school_row['TotalEnrolment']))
+def calculate_school_metrics(row):
+    enrollment = int(get_first_valid_value(row['TotalEnrolment']))
+    tod = get_first_valid_value(row['TOD'])
+    tod_str = str(tod)
+    policy_cbe = 0
+
+    # Streams
     streams = math.ceil(enrollment / 45)
-
-    required_teachers = {
-        subject: round(streams * load, 2)
-        for subject, load in subject_teacher_per_class.items()
-    }
-
-    # Normalize major subjects only
-    major_subjects = normalize_subjects(school_row['MajorSubject'])
-    major_counts = Counter(major_subjects)
-    actual_counts = dict(major_counts)  # Only major subjects count
-
+    
+    # Required teachers by subject
+    required = {s: round(streams * l, 2) for s, l in subject_teacher_per_class.items()}
+    policy_cbe = sum(required.values())
+    
+    # Actual teachers from major subject only
+    major_subjects = normalize_subjects(row['MajorSubject'])
+    actual_counter = Counter(major_subjects)
+    
+    # Subject shortages
     shortages = {}
     recommendations = []
-
-    tod = int(get_first_valid_value(school_row["TOD"]))
-
-    for subject, required in required_teachers.items():
-        actual = actual_counts.get(subject, 0)
-        shortage = round(required - actual, 2)
+    for subj in subject_lessons:
+        req = required.get(subj, 0)
+        act = actual_counter.get(subj, 0)
+        shortage = round(req - act, 2)
+        shortages[subj] = shortage
         if shortage > 0:
-            recommendations.append(f"{int(shortage)} {subject}")
-        shortages[subject] = shortage
+            recommendations.append(f"{int(shortage)} {subj}")
 
     return pd.Series({
-        "Institution_Name": school_row["Institution_Name"],
+        "Institution_Name": row["Institution_Name"],
+        "TOD": tod_str,
         "Enrollment": enrollment,
-        "TOD": tod,
-        "PolicyCBE": sum(required_teachers.values()),
-        "ActualTeachers": actual_counts,
-        "SubjectShortages": shortages,
-        "Recommendation": "Recruit " + ", ".join(recommendations) if recommendations else "No recruitment needed",
-        "RequiredTeachers": required_teachers
+        "PolicyCBE": round(policy_cbe, 2),
+        "ActualTeachers": actual_counter,
+        "RequiredTeachers": required,
+        "Shortages": shortages,
+        "Recommendation": "Recruit " + ", ".join(recommendations) if recommendations else "No recruitment needed"
     })
 
-# --- Apply to all schools ---
-subject_shortages_df = df.apply(calculate_subject_shortage_full_output, axis=1)
-subject_shortages_df = subject_shortages_df.set_index("Institution_Name")
+# --- Main App ---
+def main():
+    st.markdown("<div class='header'><h1>🏫 Teacher Shortage Recommender Dashboard</h1></div>", unsafe_allow_html=True)
+    
+    try:
+        df = load_data()
+        full_df = df.apply(calculate_school_metrics, axis=1)
+        full_df = full_df.set_index("Institution_Name")
+    except Exception as e:
+        st.error(f"Data loading or processing failed: {e}")
+        return
 
-# --- Streamlit UI ---
-st.set_page_config(page_title="Teacher Shortage Recommender", layout="wide")
-st.title("🎓 Teacher Shortage Recommendation System")
+    selected_school = st.selectbox("📚 Select School", full_df.index)
 
-selected_school = st.selectbox("Select a School", subject_shortages_df.index)
-school_data = subject_shortages_df.loc[selected_school]
+    school = full_df.loc[selected_school]
+    actuals = school["ActualTeachers"]
+    required = school["RequiredTeachers"]
+    shortages = school["Shortages"]
 
-# Summary Metrics
-st.subheader(f"📌 Summary for: {selected_school}")
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    st.metric("Total Enrollment", school_data["Enrollment"])
-with col2:
-    st.metric("Total Teachers on Duty (TOD)", school_data["TOD"])
-with col3:
-    st.metric("Policy CBE (Expected Total Teachers)", round(school_data["PolicyCBE"], 2))
-with col4:
-    st.success(school_data["Recommendation"])
+    # --- Metrics ---
+    st.subheader("📊 School Overview")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f"<div class='metric-box'>🧑🎓 <b>Enrollment</b><br>{school['Enrollment']}</div>", unsafe_allow_html=True)
+    with col2:
+        st.markdown(f"<div class='metric-box'>📍 <b>D.O.D</b><br>{school['TOD']}</div>", unsafe_allow_html=True)
+    with col3:
+        st.markdown(f"<div class='metric-box'>📜 <b>Policy CBE</b><br>{school['PolicyCBE']}</div>", unsafe_allow_html=True)
 
-# Recommendations Section
-st.markdown(f"<div class='recommendation'>📌 <b>Recommendation:</b> {school_data['Recommendation']}</div>", 
-            unsafe_allow_html=True)
+    # --- Subject Table ---
+    st.subheader("📚 Subject-Specific Staffing")
+    subject_df = pd.DataFrame([
+        {
+            "Subject": subj,
+            "Actual": actuals.get(subj, 0),
+            "Required": required.get(subj, 0),
+            "Shortage": shortages.get(subj, 0)
+        }
+        for subj in subject_lessons
+    ])
 
-# Subject-Level Analysis Section
-st.subheader("📈 Subject-Specific Staffing")
-subject_data = []
-actuals = school_data["ActualTeachers"]
-required = school_data["RequiredTeachers"]
+    st.dataframe(
+        subject_df.style.apply(
+            lambda x: ['background-color: #ffe6e6' if v > 0 else '' for v in x['Shortage']],
+            axis=0
+        ),
+        use_container_width=True,
+        hide_index=True
+    )
 
-for subject in subject_lessons:
-    subject_data.append({
-        "Subject": subject,
-        "Actual Teachers": actuals.get(subject, 0),
-        "Required Teachers": required.get(subject, 0),
-        "Shortage": round(required.get(subject, 0) - actuals.get(subject, 0), 2)
-    })
+    # --- Recommendation ---
+    st.markdown(f"""
+        <div class='recommendation'>
+            📌 <b>Recommendation:</b><br>
+            {school['Recommendation']}
+        </div>
+    """, unsafe_allow_html=True)
 
-subject_df = pd.DataFrame(subject_data)
-
-st.dataframe(
-    subject_df.style.apply(
-        lambda x: ['background-color: #ffcccc' if x["Shortage"] > 0 else '' for _ in x],
-        axis=1
-    ),
-    hide_index=True,
-    use_container_width=True
-)
-
-# Optional: View raw actuals
-with st.expander("📊 View Raw Actual Teachers by Subject"):
-    st.json(school_data["ActualTeachers"], expanded=False)
-
-# Streamlit runs from CLI
 if __name__ == "__main__":
-    pass
+    main()
