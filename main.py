@@ -148,14 +148,15 @@ def main():
         for subj in subject_lessons
     ])
 
-    st.dataframe(
-        subject_df.style.apply(
-            lambda x: ['background-color: #ffe6e6' if v > 0 else '' for v in x['Shortage']],
-            axis=0
-        ),
-        use_container_width=True,
-        hide_index=True
-    )
+   st.dataframe(
+    subject_df.style.applymap(
+        lambda v: 'background-color: #ffe6e6' if v > 0 else '',
+        subset=["Shortage"]
+    ),
+    use_container_width=True,
+    hide_index=True
+)
+
 
     # --- Recommendation ---
     st.markdown(f"""
