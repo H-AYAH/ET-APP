@@ -26,7 +26,9 @@ subject_lessons = {
     'Agriculture and Nutrition': 4,
     'Creative Arts and Sports': 5
 }
+
 subject_teacher_per_class = {subj: lessons / 27 for subj, lessons in subject_lessons.items()}
+
 subject_mapping = {
     "ENGLISH": "English",
     "KISWAHILI/ KSL": "Kiswahili/kenya sign language",
@@ -50,12 +52,16 @@ def load_data():
     return df.groupby('Institution_Name').agg(list).reset_index()
 
 def normalize_subjects(subjects):
+    """Convert to standardized subject list with mapping"""
     normalized = []
-    for subj in subjects:
-        subj_clean = subj.strip().upper()
-        mapped = subject_mapping.get(subj_clean)
-        if mapped:
-            normalized.append(mapped)
+    if isinstance(subjects, list):
+        for subj in subjects:
+            if pd.isna(subj):
+                continue
+            subj_clean = str(subj).strip().upper()
+            mapped = subject_mapping.get(subj_clean)
+            if mapped:
+                normalized.append(mapped)
     return normalized
 
 def get_first_valid_value(val):
@@ -71,20 +77,15 @@ def calculate_school_metrics(row):
     enrollment = int(get_first_valid_value(row['TotalEnrolment']))
     tod = get_first_valid_value(row['TOD'])
     tod_str = str(tod)
-    policy_cbe = 0
-
-    # Streams
-    streams = math.ceil(enrollment / 45)
     
-    # Required teachers by subject
+    streams = math.ceil(enrollment / 45)
     required = {s: round(streams * l, 2) for s, l in subject_teacher_per_class.items()}
     policy_cbe = sum(required.values())
-    
-    # Actual teachers from major subject only
+
+    # Normalize and count major subject teachers
     major_subjects = normalize_subjects(row['MajorSubject'])
     actual_counter = Counter(major_subjects)
-    
-    # Subject shortages
+
     shortages = {}
     recommendations = []
     for subj in subject_lessons:
@@ -109,7 +110,7 @@ def calculate_school_metrics(row):
 # --- Main App ---
 def main():
     st.markdown("<div class='header'><h1>🏫 Teacher Shortage Recommender Dashboard</h1></div>", unsafe_allow_html=True)
-    
+
     try:
         df = load_data()
         full_df = df.apply(calculate_school_metrics, axis=1)
