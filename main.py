@@ -78,7 +78,7 @@ def calculate_subject_shortage_full_output(school_row):
     return pd.Series({
         "Institution_Name": school_row["Institution_Name"],
         "Enrollment": enrollment,
-        "TOD": int(school_row.get("TOD", [0])[0]) if isinstance(school_row.get("TOD"), list) else int(school_row.get("TOD", 0)),
+        "TOD": int(school_row["TOD"][0]) if isinstance(school_row["TOD"], list) else int(school_row["TOD"]),
         "PolicyCBE": sum(required_teachers.values()),
         "ActualTeachers": actual_counts,
         "SubjectShortages": shortages,
