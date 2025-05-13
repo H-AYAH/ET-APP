@@ -132,7 +132,7 @@ def main():
     with col1:
         st.markdown(f"<div class='metric-box'>🧑🎓 <b>Enrollment</b><br>{school['Enrollment']}</div>", unsafe_allow_html=True)
     with col2:
-        st.markdown(f"<div class='metric-box'>📍 <b>D.O.D</b><br>{school['TOD']}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='metric-box'>📍 <b>T.O.D</b><br>{school['TOD']}</div>", unsafe_allow_html=True)
     with col3:
         st.markdown(f"<div class='metric-box'>📜 <b>Policy CBE</b><br>{school['PolicyCBE']}</div>", unsafe_allow_html=True)
 
