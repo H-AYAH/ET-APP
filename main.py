@@ -67,6 +67,15 @@ def calculate_subject_shortage_full_output(school_row):
 
     shortages = {}
     recommendations = []
+    
+     # Safely handle TOD field
+    tod_value = school_row["TOD"]
+    if isinstance(tod_value, list):
+        tod = int(tod_value[0]) if tod_value else 0
+    elif pd.isna(tod_value):
+        tod = 0
+    else:
+        tod = int(tod_value)
 
     for subject, required in required_teachers.items():
         actual = actual_counts.get(subject, 0)
@@ -75,10 +84,12 @@ def calculate_subject_shortage_full_output(school_row):
             recommendations.append(f"{int(shortage)} {subject}")
         shortages[subject] = shortage
 
+
+
     return pd.Series({
         "Institution_Name": school_row["Institution_Name"],
         "Enrollment": enrollment,
-        "TOD": int(school_row["TOD"][0]) if isinstance(school_row["TOD"], list) else int(school_row["TOD"]),
+        "TOD": tod,
         "PolicyCBE": sum(required_teachers.values()),
         "ActualTeachers": actual_counts,
         "SubjectShortages": shortages,
