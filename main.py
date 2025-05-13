@@ -49,10 +49,19 @@ def normalize_subjects(subjects):
             normalized.append(mapped)
     return normalized
 
+# --- Helper to safely extract scalar from list ---
+def get_first_valid_value(lst):
+    if isinstance(lst, list):
+        for val in lst:
+            if pd.notna(val):
+                return val
+    elif pd.notna(lst):
+        return lst
+    return 0
+
 # --- Shortage Calculation ---
 def calculate_subject_shortage_full_output(school_row):
-    enrollment = school_row['TotalEnrolment'][0] if isinstance(school_row['TotalEnrolment'], list) else 0
-    if pd.isna(enrollment): enrollment = 0
+    enrollment = int(get_first_valid_value(school_row['TotalEnrolment']))
     streams = math.ceil(enrollment / 45)
 
     required_teachers = {
@@ -67,15 +76,8 @@ def calculate_subject_shortage_full_output(school_row):
 
     shortages = {}
     recommendations = []
-    
-     # Safely handle TOD field
-    tod_value = school_row["TOD"]
-    if isinstance(tod_value, list):
-        tod = int(tod_value[0]) if tod_value else 0
-    elif pd.isna(tod_value):
-        tod = 0
-    else:
-        tod = int(tod_value)
+
+    tod = int(get_first_valid_value(school_row["TOD"]))
 
     for subject, required in required_teachers.items():
         actual = actual_counts.get(subject, 0)
@@ -83,8 +85,6 @@ def calculate_subject_shortage_full_output(school_row):
         if shortage > 0:
             recommendations.append(f"{int(shortage)} {subject}")
         shortages[subject] = shortage
-
-
 
     return pd.Series({
         "Institution_Name": school_row["Institution_Name"],
@@ -153,6 +153,6 @@ st.dataframe(
 with st.expander("📊 View Raw Actual Teachers by Subject"):
     st.json(school_data["ActualTeachers"], expanded=False)
 
-# Run app
+# Streamlit runs from CLI
 if __name__ == "__main__":
-    pass  # Streamlit runs from `streamlit run main.py`
+    pass
