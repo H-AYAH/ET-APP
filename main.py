@@ -5,6 +5,17 @@ import pandas as pd
 import math
 from collections import Counter
 
+# Custom CSS styling
+st.markdown("""
+    <style>
+    .main {background-color: #f9f9f9;}
+    .header {padding: 20px; background: #00467F; color: white; border-radius: 10px;}
+    .metric-box {padding: 15px; background: white; border-radius: 10px; margin: 10px 0; box-shadow: 0 2px 5px rgba(0,0,0,0.1);}
+    .recommendation {background: #e8f4ff; padding: 15px; border-left: 4px solid #00467F; margin: 20px 0;}
+    .shortage {color: #ff4444; font-weight: bold;}
+    </style>
+""", unsafe_allow_html=True)
+
 # --- Constants and Setup ---
 CSV_URL = "https://raw.githubusercontent.com/H-AYAH/Teachershortage-app/main/SchoolsSecondary_11.csv"
 
@@ -74,7 +85,7 @@ def calculate_subject_shortage_full_output(school_row):
 
     major_counts = Counter(major_subjects)
     minor_counts = Counter(minor_subjects)
-    actual_counts = dict(major_counts + minor_counts)
+    actual_counts = dict(major_counts)
 
     shortages = {}
     recommendations = []
