@@ -103,7 +103,7 @@ def calculate_subject_shortage_full_output(school_row):
 
 # --- Main App Logic ---
 def main():
-    st.set_page_config(page_title="Teacher Shortage Recommender", layout="wide")
+    
     st.markdown("<div class='header'><h1>🏫 Teacher Shortage Recommender Dashboard</h1></div>", unsafe_allow_html=True)
     st.write("Select an institution to view the current teaching status and recommendations based on the CBC policy.")
 
