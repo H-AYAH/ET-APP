@@ -104,7 +104,6 @@ def calculate_subject_shortage_full_output(school_row):
 # --- Main App Logic ---
 def main():
     st.set_page_config(page_title="Teacher Shortage Recommender", layout="wide")
-    st.title("📚 Teacher Shortage Recommender System")
     st.markdown("<div class='header'><h1>🏫 Teacher Shortage Recommender Dashboard</h1></div>", unsafe_allow_html=True)
     st.write("Select an institution to view the current teaching status and recommendations based on the CBC policy.")
 
@@ -120,13 +119,37 @@ def main():
     school_row = df[df['Institution_Name'] == selected_school].iloc[0]
     school_data = calculate_subject_shortage_full_output(school_row)
 
-    st.subheader(f"📌 Summary for: {selected_school}")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Total Teachers on Duty (TOD)", school_data["TOD"])
-        st.metric("Policy CBE (Expected Total Teachers)", round(school_data["PolicyCBE"], 2))
-    with col2:
-        st.success(school_data["Recommendation"])
+    st.subheader("📊 School Overview")
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.markdown(
+        f"""<div class='metric-box'>
+            🧑🎓 <b>Total Enrollment</b><br>
+            {school['Enrollment']}
+        </div>""",
+        unsafe_allow_html=True
+    )
+
+with col2:
+    st.markdown(
+        f"""<div class='metric-box'>
+            📍 <b>Teachers on Duty (TOD)</b><br>
+            {school['TOD']}
+        </div>""",
+        unsafe_allow_html=True
+    )
+
+with col3:
+    rounded_cbe = round(school['PolicyCBE'], 2)
+    st.markdown(
+        f"""<div class='metric-box'>
+            📜 <b>Policy CBE</b><br>
+            <small>Expected Total Teachers</small><br>
+            {rounded_cbe}
+        </div>""",
+        unsafe_allow_html=True
+    )
 
     # ✅ Styled Recommendation Box
     st.markdown(
