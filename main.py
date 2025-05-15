@@ -1,16 +1,41 @@
-# main.py
-
 import streamlit as st
 import pandas as pd
 import math
 from collections import Counter
 
+# -----------------------------
+# Policy Provision Parameters
+# -----------------------------
+policy_brackets = [
+    {'streams': 1, 'enr_min': 0, 'enr_max': 180, 'cbe': 9},
+    {'streams': 2, 'enr_min': 181, 'enr_max': 360, 'cbe': 19},
+    {'streams': 3, 'enr_min': 361, 'enr_max': 540, 'cbe': 28},
+    {'streams': 4, 'enr_min': 541, 'enr_max': 720, 'cbe': 38},
+    {'streams': 5, 'enr_min': 721, 'enr_max': 900, 'cbe': 47},
+    {'streams': 6, 'enr_min': 901, 'enr_max': 1080, 'cbe': 55},
+    {'streams': 7, 'enr_min': 1081, 'enr_max': 1260, 'cbe': 63},
+    {'streams': 8, 'enr_min': 1261, 'enr_max': 1440, 'cbe': 68},
+    {'streams': 9, 'enr_min': 1441, 'enr_max': 1620, 'cbe': 76},
+    {'streams': 10, 'enr_min': 1621, 'enr_max': 1800, 'cbe': 85},
+    {'streams': 11, 'enr_min': 1801, 'enr_max': 1980, 'cbe': 93},
+    {'streams': 12, 'enr_min': 1981, 'enr_max': 2160, 'cbe': 101},
+]
 
+def get_policy_cbe(enrollment):
+    for bracket in policy_brackets:
+        if bracket['enr_min'] <= enrollment <= bracket['enr_max']:
+            return bracket['cbe']
+    return 93 + 8 * (math.ceil(enrollment / 180) - 11)
 
+def calculate_likely_streams(cbe_actual):
+    for bracket in policy_brackets:
+        if cbe_actual <= bracket['cbe']:
+            return bracket['streams']
+    return math.ceil((cbe_actual - 93) / 8) + 11
 
-# --- Constants and Setup ---
-CSV_URL = "https://raw.githubusercontent.com/H-AYAH/Teachershortage-app/main/SchoolsSecondary_11.csv"
-
+# -----------------------------
+# Subject Load Per Week
+# -----------------------------
 subject_lessons = {
     'English': 5,
     'Kiswahili/kenya sign language': 4,
@@ -23,174 +48,81 @@ subject_lessons = {
     'Creative Arts and Sports': 5
 }
 
-TOTAL_WEEKLY_LESSONS_PER_CLASS = sum(subject_lessons.values()) + 1  # +1 for PPI
-subject_teacher_per_class = {subject: lessons / 27 for subject, lessons in subject_lessons.items()}
+TOTAL_WEEKLY_LESSONS_PER_CLASS = sum(subject_lessons.values()) + 1
+subject_teacher_per_class = {subject: round(lessons / 27, 2) for subject, lessons in subject_lessons.items()}
 
+# -----------------------------
+# Load Data
+# -----------------------------
+CSV_URL = 'https://raw.githubusercontent.com/yourusername/yourrepo/main/teacher_data.csv'
+df = pd.read_csv(CSV_URL)
+df = df.groupby('Institution_Name').agg(list).reset_index()
 
-# --- Utility Functions ---
-def calculate_admin_count(num_classes):
-    if num_classes <= 7:
-        return {'DeputyPrincipals': 1, 'SeniorMasters': 1}
-    elif 8 <= num_classes <= 11:
-        return {'DeputyPrincipals': 1, 'SeniorMasters': 2}
-    elif 12 <= num_classes <= 15:
-        return {'DeputyPrincipals': 1, 'SeniorMasters': 4}
-    elif 16 <= num_classes <= 23:
-        return {'DeputyPrincipals': 2, 'SeniorMasters': 5}
-    elif 24 <= num_classes <= 31:
-        return {'DeputyPrincipals': 2, 'SeniorMasters': 6}
-    elif 32 <= num_classes <= 43:
-        return {'DeputyPrincipals': 2, 'SeniorMasters': 7}
-    elif 44 <= num_classes <= 47:
-        return {'DeputyPrincipals': 2, 'SeniorMasters': 8}
-    else:
-        return {'DeputyPrincipals': 2, 'SeniorMasters': 9}
-
-
+# -----------------------------
+# Subject Shortage Calculation
+# -----------------------------
 def calculate_subject_shortage_full_output(school_row):
     enrollment_list = school_row['TotalEnrolment']
-    if isinstance(enrollment_list, list):
-        if isinstance(enrollment_list[0], list):
-            enrollment = enrollment_list[0][0]
-        else:
-            enrollment = enrollment_list[0]
-    else:
-        enrollment = enrollment_list
-
-    if pd.isna(enrollment):
-        enrollment = 0
+    enrollment = enrollment_list[0][0] if isinstance(enrollment_list[0], list) else enrollment_list[0]
+    enrollment = 0 if pd.isna(enrollment) else enrollment
 
     streams = math.ceil(enrollment / 45)
-
-    required_teachers = {
-        subject: round(streams * load, 2)
-        for subject, load in subject_teacher_per_class.items()
-    }
+    required_teachers = {subject: round(streams * load) for subject, load in subject_teacher_per_class.items()}
 
     major_subjects = school_row['MajorSubject']
     minor_subjects = school_row['MinorSubject']
 
-    if major_subjects and isinstance(major_subjects[0], list):
-        major_subjects = [item for sublist in major_subjects for item in sublist]
-    if minor_subjects and isinstance(minor_subjects[0], list):
-        minor_subjects = [item for sublist in minor_subjects for item in sublist]
+    major_subjects = [item for sublist in major_subjects for item in (sublist if isinstance(sublist, list) else [sublist])]
+    minor_subjects = [item for sublist in minor_subjects for item in (sublist if isinstance(sublist, list) else [sublist])]
 
-    major_counts = Counter(major_subjects)
-    minor_counts = Counter(minor_subjects)
-    actual_counts = dict(major_counts)
+    all_subjects = major_subjects + minor_subjects
+    actual_counts = dict(Counter(all_subjects))
 
     shortages = {}
     recommendations = []
 
     for subject, required in required_teachers.items():
         actual = actual_counts.get(subject, 0)
-        shortage = round(required - actual, 2)
+        shortage = round(required - actual)
         if shortage > 0:
             recommendations.append(f"{int(shortage)} {subject}")
         shortages[subject] = shortage
 
     output = {
+        "Institution_Name": school_row["Institution_Name"],
+        "Enrollment": enrollment,
         "TOD": int(school_row.get("TOD", [0])[0]) if isinstance(school_row.get("TOD"), list) else int(school_row.get("TOD", 0)),
-        "PolicyCBE": sum(required_teachers.values()),
+        "PolicyCBE": get_policy_cbe(enrollment),
+        "LikelyStreams": calculate_likely_streams(get_policy_cbe(enrollment)),
         "ActualTeachers": actual_counts,
         "SubjectShortages": shortages,
-        "Recommendation": "Recruit " + ", ".join(recommendations) if recommendations else "No recruitment needed",
-        "RequiredTeachers": required_teachers
+        "Recommendation": "Recruit " + ", ".join(recommendations) if recommendations else "No recruitment needed"
     }
 
-    return output
+    return pd.Series(output)
 
+subject_shortages_df = df.apply(calculate_subject_shortage_full_output, axis=1)
+subject_shortages_df = subject_shortages_df.set_index('Institution_Name')
 
-# --- Main App Logic ---
-def main():
-    
-    st.markdown("<div class='header'><h1>🏫 Teacher Shortage Recommender Dashboard</h1></div>", unsafe_allow_html=True)
-    st.write("Select an institution to view the current teaching status and recommendations based on the CBC policy.")
+# -----------------------------
+# Streamlit Dashboard
+# -----------------------------
+st.set_page_config(page_title="Teacher Shortage Recommender", layout="wide")
+st.title("📚 Teacher Shortage Recommender Dashboard")
 
-    @st.cache_data
-    def load_data():
-        df = pd.read_csv(CSV_URL)
-        df = df.groupby('Institution_Name').agg(list).reset_index()
-        return df
+school_selected = st.selectbox("Select a School", subject_shortages_df.index)
+school_data = subject_shortages_df.loc[school_selected]
 
-    df = load_data()
-    institutions = df['Institution_Name'].tolist()
-    selected_school = st.selectbox("🏫 Select Institution", institutions)
-    school_row = df[df['Institution_Name'] == selected_school].iloc[0]
-    school_data = calculate_subject_shortage_full_output(school_row)
-
-    st.subheader("📊 School Overview")
 col1, col2, col3 = st.columns(3)
+col1.metric("📊 Enrollment", int(school_data['Enrollment']))
+col2.metric("📌 Policy CBE", int(school_data['PolicyCBE']))
+col3.metric("🏫 Likely Streams", int(school_data['LikelyStreams']))
 
-with col1:
-    st.markdown(
-        f"""<div class='metric-box'>
-            🧑🎓 <b>Total Enrollment</b><br>
-            {school['Enrollment']}
-        </div>""",
-        unsafe_allow_html=True
-    )
+st.subheader("👨‍🏫 Subject-Specific Actual Teachers")
+st.dataframe(pd.DataFrame.from_dict(school_data['ActualTeachers'], orient='index', columns=['Actual Teachers']))
 
-with col2:
-    st.markdown(
-        f"""<div class='metric-box'>
-            📍 <b>Teachers on Duty (TOD)</b><br>
-            {school['TOD']}
-        </div>""",
-        unsafe_allow_html=True
-    )
+st.subheader("⚠️ Subject Shortages")
+st.dataframe(pd.DataFrame.from_dict(school_data['SubjectShortages'], orient='index', columns=['Shortage']))
 
-with col3:
-    rounded_cbe = round(school['PolicyCBE'], 2)
-    st.markdown(
-        f"""<div class='metric-box'>
-            📜 <b>Policy CBE</b><br>
-            <small>Expected Total Teachers</small><br>
-            {rounded_cbe}
-        </div>""",
-        unsafe_allow_html=True
-    )
-
-    # ✅ Styled Recommendation Box
-    st.markdown(
-        f"<div class='recommendation'>📌 <b>Recommendation:</b> {school_data['Recommendation']}</div>",
-        unsafe_allow_html=True
-    )
-
-    # ✅ Subject-Specific Staffing Section
-    st.subheader("📈 Subject-Specific Staffing")
-
-    # Build subject-level DataFrame
-    subject_data = []
-    for subject, required in school_data["RequiredTeachers"].items():
-        actual = school_data["ActualTeachers"].get(subject, 0)
-        shortage = round(required - actual, 2)
-        subject_data.append({
-            "Subject": subject,
-            "Actual Teachers": actual,
-            "Required Teachers": required,
-            "Shortage": shortage
-        })
-
-    subject_df = pd.DataFrame(subject_data)
-
-    # Display with conditional formatting
-    st.dataframe(
-        subject_df.style.apply(
-            lambda row: ['background-color: #ffcccc' if row['Shortage'] > 0 else '' for _ in row],
-            axis=1
-        ),
-        hide_index=True,
-        use_container_width=True
-    )
-
-    # Expanders
-    with st.expander("📊 Actual Teachers per Subject"):
-        st.json(school_data["ActualTeachers"])
-    with st.expander("📉 Subject-Specific Shortages"):
-        st.json(school_data["SubjectShortages"])
-
-
-# ✅ Streamlit Entry Point
-if __name__ == "__main__":
-    main()
+st.subheader("📋 Recommendation")
+st.success(school_data['Recommendation'])
