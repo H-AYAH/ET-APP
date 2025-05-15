@@ -92,9 +92,9 @@ for subject, required in required_teachers.items():
 
     # Extract TOD safely
     tod_value = school_row.get("TOD", 0)
-    if isinstance(tod_value, list):
+        if isinstance(tod_value, list):
         tod = int(tod_value[0]) if tod_value else 0
-    else:
+        else:
         tod = int(tod_value) if pd.notna(tod_value) else 0
 
     output = {
