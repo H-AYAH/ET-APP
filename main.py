@@ -88,7 +88,7 @@ def calculate_subject_shortage_full_output(school_row):
         shortages[subject] = shortage
 
     # TOD processing
-    tod_value = school_row.get("TOD", 0)
+    tod_value = school_row.get("TOD",0)
     if isinstance(tod_value, list):
         tod = int(tod_value[0]) if tod_value else 0
     else:
