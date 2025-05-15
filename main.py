@@ -83,7 +83,7 @@ def calculate_subject_shortage_full_output(school_row):
     for subject, required in required_teachers.items():
         actual = actual_counts.get(subject, 0)
         shortage = max(0, round(required - actual))
-        if shortage > 0:
+       if shortage > 0:
             recommendations.append(f"{shortage} {subject}")
         shortages[subject] = shortage
 
