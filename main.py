@@ -55,8 +55,9 @@ subject_teacher_per_class = {subject: round(lessons / 27, 2) for subject, lesson
 # Load Data
 # -----------------------------
 # Load data directly from GitHub Excel
-url = "https://raw.githubusercontent.com/H-AYAH/Teachershortage-app/main/Schools(Secondary)%20(11).xlsx"
-df = pd.read_excel(url)
+csv_url = "https://raw.githubusercontent.com/H-AYAH/Teachershortage-app/main/SchoolsSecondary_11.csv"
+df = pd.read_csv(csv_url)
+
 df = df.groupby('Institution_Name').agg(list).reset_index()
 
 # -----------------------------
