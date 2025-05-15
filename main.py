@@ -3,9 +3,9 @@ import pandas as pd
 import math
 from collections import Counter
 
-# ======================
-# Policy Parameters
-# ======================
+# -----------------------------
+# Policy Provision Parameters
+# -----------------------------
 policy_brackets = [
     {'streams': 1, 'enr_min': 0, 'enr_max': 180, 'cbe': 9},
     {'streams': 2, 'enr_min': 181, 'enr_max': 360, 'cbe': 19},
@@ -21,9 +21,6 @@ policy_brackets = [
     {'streams': 12, 'enr_min': 1981, 'enr_max': 2160, 'cbe': 101},
 ]
 
-# ======================
-# Helper Functions
-# ======================
 def get_policy_cbe(enrollment):
     for bracket in policy_brackets:
         if bracket['enr_min'] <= enrollment <= bracket['enr_max']:
@@ -36,9 +33,9 @@ def calculate_likely_streams(cbe_actual):
             return bracket['streams']
     return math.ceil((cbe_actual - 93) / 8) + 11
 
-# ======================
-# Subject Load Config
-# ======================
+# -----------------------------
+# Subject Load Per Week
+# -----------------------------
 subject_lessons = {
     'English': 5,
     'Kiswahili/kenya sign language': 4,
@@ -54,23 +51,87 @@ subject_lessons = {
 TOTAL_WEEKLY_LESSONS_PER_CLASS = sum(subject_lessons.values()) + 1
 subject_teacher_per_class = {subject: round(lessons / 27, 2) for subject, lessons in subject_lessons.items()}
 
-# ======================
-# Data Processing
-# ======================
+# -----------------------------
+# Load Data
+# -----------------------------
+# Load data directly from GitHub Excel
 csv_url = "https://raw.githubusercontent.com/H-AYAH/Teachershortage-app/main/SchoolsSecondary_11.csv"
 df = pd.read_csv(csv_url)
+
 df = df.groupby('Institution_Name').agg(list).reset_index()
 
+# -----------------------------
+# Subject Shortage Calculation
+# -----------------------------
 def calculate_subject_shortage_full_output(school_row):
-    # Enrollment processing
     enrollment_list = school_row['TotalEnrolment']
     enrollment = enrollment_list[0][0] if isinstance(enrollment_list[0], list) else enrollment_list[0]
     enrollment = 0 if pd.isna(enrollment) else enrollment
 
-    # Stream calculations
     streams = math.ceil(enrollment / 45)
     required_teachers = {subject: round(streams * load) for subject, load in subject_teacher_per_class.items()}
 
-    # Subject processing
-    major_subjects = [item for sublist in school_row['MajorSubject'] for item in (sublist if isinstance(sublist, list) else [sublist])]
-    minor_subjects = [item for sublist in school_row['MinorSubject
+    major_subjects = school_row['MajorSubject']
+    minor_subjects = school_row['MinorSubject']
+
+    major_subjects = [item for sublist in major_subjects for item in (sublist if isinstance(sublist, list) else [sublist])]
+    minor_subjects = [item for sublist in minor_subjects for item in (sublist if isinstance(sublist, list) else [sublist])]
+
+    all_subjects = major_subjects + minor_subjects
+    actual_counts = dict(Counter(all_subjects))
+
+    shortages = {}
+    recommendations = []
+    
+for subject, required in required_teachers.items():
+        actual = all_counts.get(subject, 0)
+        shortage = max(0, round(required - actual))
+        if shortage > 0:
+            recommendations.append(f"{shortage} {subject}")
+        shortages[subject] = shortage
+
+    # Extract TOD safely
+    tod_value = school_row.get("TOD", 0)
+        if isinstance(tod_value, list):
+        tod = int(tod_value[0]) if tod_value else 0
+        else:
+        tod = int(tod_value) if pd.notna(tod_value) else 0
+
+    output = {
+        "Institution_Name": school_row["Institution_Name"],
+        "Enrollment": enrollment,
+        "TOD": int(school_row.get("TOD", [0])[0]) if isinstance(school_row.get("TOD"), list) else int(school_row.get("TOD", 0)),
+        "PolicyCBE": get_policy_cbe(enrollment),
+        "LikelyStreams": calculate_likely_streams(get_policy_cbe(enrollment)),
+        "ActualTeachers": actual_counts,
+        "SubjectShortages": shortages,
+        "Recommendation": "Recruit " + ", ".join(recommendations) if recommendations else "No recruitment needed"
+    }
+
+    return pd.Series(output)
+
+subject_shortages_df = df.apply(calculate_subject_shortage_full_output, axis=1)
+subject_shortages_df = subject_shortages_df.set_index('Institution_Name')
+
+# -----------------------------
+# Streamlit Dashboard
+# -----------------------------
+st.set_page_config(page_title="Teacher Shortage Recommender", layout="wide")
+st.title("📚 Teacher Shortage Recommender Dashboard")
+
+school_selected = st.selectbox("Select a School", subject_shortages_df.index)
+school_data = subject_shortages_df.loc[school_selected]
+
+col1, col2, col3 = st.columns(3)
+col1.metric("📊 Enrollment", int(school_data['Enrollment']))
+col2.metric("📌 Policy CBE", int(school_data['PolicyCBE']))
+col3.metric("🏫 Likely Streams", int(school_data['LikelyStreams']))
+
+st.subheader("👨‍🏫 Subject-Specific Actual Teachers")
+st.dataframe(pd.DataFrame.from_dict(school_data['ActualTeachers'], orient='index', columns=['Actual Teachers']))
+
+st.subheader("⚠️ Subject Shortages")
+st.dataframe(pd.DataFrame.from_dict(school_data['SubjectShortages'], orient='index', columns=['Shortage']))
+
+st.subheader("📋 Recommendation")
+st.success(school_data['Recommendation'])
