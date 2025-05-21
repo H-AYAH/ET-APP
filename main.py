@@ -4,41 +4,262 @@ import pandas as pd
 import numpy as np
 import math
 
-# [Keep all your existing data processing and calculation functions unchanged here...]
+#retrieving data
 
-# ====================== ENHANCED UI COMPONENTS ======================
+csv_url = "https://raw.githubusercontent.com/H-AYAH/Teachershortage-app/main/SchoolsSecondary_11.csv"
+df = pd.read_csv(csv_url)
+
+#preprocessing
+# df = df.dropna ()
+
+# If columns contain lists (e.g., from reading CSV with object dtype), flatten them
+for col in ['MajorSubject', 'MinorSubject']:
+    df[col] = df[col].apply(lambda x: x[0] if isinstance(x, list) else x)
+
+# Ensure numeric fields are scalar and not lists or repeated values
+for col in ['TotalEnrolment', 'TOD', 'CBE', 'CountyName', 'Role']:
+    df[col] = df[col].apply(lambda x: x[0] if isinstance(x, list) else x)
+
+
+# Keep  while keeping subjects as list
+agg_funcs = {
+    'MajorSubject': list,
+    'MinorSubject': list,
+    'TotalEnrolment': 'first',
+    'TOD': 'first', 
+    'CBE' : 'first',
+    'CountyName': 'first',
+    'Role': 'first',
+}
+
+df = df.groupby('Institution_Name').agg(agg_funcs).reset_index()
+
+
+policy_brackets = [
+    {'streams': 1, 'enr_min': 0, 'enr_max': 180, 'cbe': 9},
+    {'streams': 2, 'enr_min': 181, 'enr_max': 360, 'cbe': 19},
+    {'streams': 3, 'enr_min': 361, 'enr_max': 540, 'cbe': 28},
+    {'streams': 4, 'enr_min': 541, 'enr_max': 720, 'cbe': 38},
+    {'streams': 5, 'enr_min': 721, 'enr_max': 900, 'cbe': 47},
+    {'streams': 6, 'enr_min': 901, 'enr_max': 1080, 'cbe': 55},
+    {'streams': 7, 'enr_min': 1081, 'enr_max': 1260, 'cbe': 63},
+    {'streams': 8, 'enr_min': 1261, 'enr_max': 1440, 'cbe': 68},
+    {'streams': 9, 'enr_min': 1441, 'enr_max': 1620, 'cbe': 76},
+    {'streams': 10, 'enr_min': 1621, 'enr_max': 1800, 'cbe': 85},
+    {'streams': 11, 'enr_min': 1801, 'enr_max': 1980, 'cbe': 93},
+    {'streams': 12, 'enr_min': 1981, 'enr_max': 2160, 'cbe': 101},
+]
+
+# Helper functions
+def get_policy_cbe(enrollment):
+    for bracket in policy_brackets:
+        if bracket['enr_min'] <= enrollment <= bracket['enr_max']:
+            return bracket['cbe']
+    return 93 + 8 * (math.ceil(enrollment / 180) - 11)
+
+def calculate_likely_streams(cbe_actual):
+    for bracket in policy_brackets:
+        if cbe_actual <= bracket['cbe']:
+            return bracket['streams']
+    return math.ceil((cbe_actual - 93) / 8) + 11
+
+
+subject_lessons = {
+    'English'                                           : 5,
+    'Kiswahili/kenya sign language'                     : 4,
+    'Mathematic'                                        : 5,
+    'Religious Education'                               : 4,
+    'Social Studies (including Life Skills Education)'  : 4,
+    'Intergrated Science (including Health Education)'  : 5,
+    'Pre-Technical Studies'                             : 4,
+    'Agriculture and Nutrition'                         : 4,
+    'Creative Arts and Sports'                          : 5
+}
+
+TOTAL_WEEKLY_LESSONS_PER_CLASS = sum(subject_lessons.values()) + 1 #PPI
+
+# Calculate the number of teachers required per subject per class (stream)
+subject_teacher_per_class = {subject: lessons/27 for subject, lessons in subject_lessons.items()}
+
+
+
+# calculating the number of streams
+def calculate_streams(TotalEnrolment):
+  return math.ceil(TotalEnrolment / 45)
+
+
+#calculate the total number of lessons needed
+def calculate_total_lessons(num_classes):
+  return num_classes * TOTAL_WEEKLY_LESSONS_PER_CLASS
+
+
+#administrators  policy provisions based on the number of classes
+def get_admin_count (num_classes):
+  if num_classes <= 7:
+      return {'DeputyPrincipals':1, 'SeniorMaster':1}
+  elif 8 <= num_classes <= 11:
+      return {'DeputyPrincipals': 1, 'SeniorMasters': 2}
+  elif 12 <= num_classes <= 15:
+      return {'DeputyPrincipals': 1, 'SeniorMasters': 4}
+  elif 16 <= num_classes <= 23:
+      return {'DeputyPrincipals': 2, 'SeniorMasters': 5}
+  elif 24 <= num_classes <= 31:
+      return {'DeputyPrincipals': 2, 'SeniorMasters': 6}
+  elif 32 <= num_classes <= 43:
+      return {'DeputyPrincipals': 2, 'SeniorMasters': 7}
+  elif 44 <= num_classes <= 47:
+      return {'DeputyPrincipals': 2, 'SeniorMasters': 8}
+  else:
+      return {'DeputyPrincipals': 2, 'SeniorMasters': 9}
+
+
+# Calculating the shortfall  from admin load
+def calculate_admin_shortfall(num_admins, lessons_allocated_per_admin, expected_load_per_admin = 27):
+  total_expected  = num_admins * expected_load_per_admin
+  shortfall       = (total_expected - lessons_allocated_per_admin) /  27
+  return shortfall
+
+
+def calculate_total_teachers(enrollment):
+    streams = calculate_likely_streams(enrollment)
+    total_lessons = calculate_total_lessons(streams)
+
+    admins = get_admin_count(streams)
+    num_admins = 1 + admins['DeputyPrincipals'] + admins['SeniorMasters']  # +1 for Principal
+
+    # Admin lesson allocations (estimated):
+    principal_lessons = 10
+    deputy_lessons = 15
+    senior_master_lessons = 18
+
+    admin_lessons = (
+        principal_lessons +
+        (admins['DeputyPrincipals'] * deputy_lessons) +
+        (admins['SeniorMasters'] * senior_master_lessons)
+    )
+
+    # Calculate the admin shortfall in teaching
+    admin_shortfall = calculate_admin_shortfall(num_admins, admin_lessons)
+
+    # Final teacher requirement
+    teachers_required = (total_lessons + (admin_shortfall * 27)) / 27
+
+    return math.ceil(teachers_required), streams
+
+def calculate_subject_shortage_full_output(school_row, debug=False):
+    try:
+        # Debugging line to see the row data (only if debug is True)
+        if debug:
+            st.write("Processing row:", school_row)
+
+        # Safely extract enrollment
+        enrollment = school_row['TotalEnrolment']
+        
+        # Fallback in case of missing/NaN
+        if pd.isna(enrollment):
+            enrollment = 0
+
+        # Estimate streams
+        streams = math.ceil(enrollment / 45)
+
+        # Policy required teachers per subject
+        required_teachers = {
+            subject: math.ceil(streams * load)
+            for subject, load in subject_teacher_per_class.items()
+        }
+
+        # Flatten major/minor subjects
+        major_subjects = school_row['MajorSubject']
+        minor_subjects = school_row['MinorSubject']
+
+        # Ensure major_subjects and minor_subjects are lists
+        if isinstance(major_subjects, str):
+            major_subjects = [major_subjects]
+        if isinstance(minor_subjects, str):
+            minor_subjects = [minor_subjects]
+
+        # Count occurrences of major and minor subjects
+        major_counts = Counter(major_subjects)
+        minor_counts = Counter(minor_subjects)
+        all_subjects = major_counts + minor_counts
+        actual_counts = dict(Counter(all_subjects))
+
+        # Calculate shortages and prepare a recommendation
+        shortages = {}
+        recommendations = []
+
+        for subject, required in required_teachers.items():
+            actual = actual_counts.get(subject, 0)
+            shortage = math.ceil(required - actual)
+            if shortage > 0:
+                recommendations.append(f"{int(shortage)} {subject}")
+            shortages[subject] = shortage
+
+        # Assemble full output
+        output = {
+            "Institution_Name": school_row["Institution_Name"],
+            "Enrollment": enrollment,
+            "TOD": int(school_row['TOD']) if not pd.isna(school_row['TOD']) else 0,
+            "PolicyCBE": get_policy_cbe(enrollment),
+            "LikelyStreams": calculate_likely_streams(get_policy_cbe(enrollment)),
+            "ActualTeachers": actual_counts,
+            "SubjectShortages": shortages,
+            "Recommendation": "Recruit " + ", ".join(recommendations) if recommendations else "No recruitment needed"
+        }
+
+        return pd.Series(output)
+
+    except Exception as e:
+        st.write(f"Error processing row: {school_row}")
+        st.write(e)
+        return pd.Series()  # Return an empty Series or handle as needed
+
+
+subject_shortages_df = df.apply(calculate_subject_shortage_full_output, axis=1)
+subject_shortages_df['Institution_Name'] = df['Institution_Name']
+
+# Reorganize
+subject_shortages_df = subject_shortages_df.set_index('Institution_Name')
+
+
+# dashboard UI
+
+
+# ====================== MODIFIED STREAMLIT UI ONLY ======================
 st.set_page_config(page_title="Teacher Shortage Dashboard", layout="wide", page_icon="🏫")
 
-# Custom CSS Styling with Navy Blue, Gold, and White Theme
+# Custom CSS Styling (Navy + Gold)
 st.markdown("""
 <style>
     :root {
-        --navy: #000080;
-        --gold: #FFD700;
-        --white: #FFFFFF;
+        --navy: #002366;
+        --gold: #D4AF37;
+        --cream: #F5F5F5;
     }
-    .main {background-color: var(--white);}
-    .header {color: var(--white); padding: 2rem; background: var(--navy); 
-             border-radius: 10px; margin-bottom: 1.5rem;}
-    .metric-box {padding: 1rem; border-radius: 8px; background: var(--white);
-                 border: 2px solid var(--navy); margin: 0.5rem;}
-    .metric-title {color: var(--navy); font-weight: 700; font-size: 1.1rem;}
-    .metric-value {color: var(--gold); font-weight: 800; font-size: 1.8rem;}
-    .stDataFrame {border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);}
-    .recommendation {padding: 1.5rem; background: rgba(0,0,128,0.1); 
-                     border-left: 4px solid var(--gold); border-radius: 8px;}
-    th {background-color: var(--navy) !important; color: var(--white) !important;}
+    .main {background-color: var(--cream);}
+    .header {color: var(--gold); padding: 2rem; background: var(--navy); 
+             border-radius: 8px; margin-bottom: 1rem;}
+    .metric-box {padding: 1rem; border: 2px solid var(--navy); 
+                 border-radius: 8px; background: white; margin: 0.5rem;}
+    .metric-title {color: var(--navy); font-weight: 600;}
+    .metric-value {color: var(--gold); font-weight: 700; font-size: 1.5rem;}
+    .stDataFrame {border: 2px solid var(--navy); border-radius: 8px;}
+    th {background-color: var(--navy) !important; color: white !important;}
+    .recommendation {padding: 1rem; background: rgba(212, 175, 55, 0.1); 
+                     border-left: 4px solid var(--gold); border-radius: 6px;}
 </style>
 """, unsafe_allow_html=True)
 
 # Header Section
 st.markdown(f'''
     <div class="header">
-        <h1 style='color: var(--gold); margin-bottom: 0;'>Teacher Shortage Dashboard</h1>
-        <p style='color: var(--white); margin-top: 0.5rem;'>Comprehensive Staffing Analysis for Secondary Schools</p>
+        <h1 style='margin-bottom: 0;'>Teacher Shortage Dashboard</h1>
+        <p style='margin-top: 0.5rem;'>Secondary Schools Staffing Analysis</p>
     </div>
 ''', unsafe_allow_html=True)
 
+# Header Section
+st.markdown('<div class="header"><h1>📚 Teacher Shortage Dashboard</h1></div>', unsafe_allow_html=True)
 # School Selection
 selected_school = st.selectbox(
     "🏫 Select School", 
@@ -47,68 +268,69 @@ selected_school = st.selectbox(
 )
 school_data = subject_shortages_df.loc[selected_school]
 
-# Key Metrics
+
+Key Metrics - Updated Colors Only
 st.markdown("---")
-cols = st.columns(3)
-metric_config = [
-    ("📊 Enrollment", "Enrollment"),
-    ("📌 Policy CBE", "PolicyCBE"),
-    ("🏫 Likely Streams", "LikelyStreams")
-]
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.markdown(f'<div class="metric-box"><div class="metric-title">📊 Enrollment</div><div class="metric-value">{int(school_data["Enrollment"]):,}</div></div>', unsafe_allow_html=True)
+with col2:
+    st.markdown(f'<div class="metric-box"><div class="metric-title">📌 Policy CBE</div><div class="metric-value">{int(school_data["PolicyCBE"])}</div></div>', unsafe_allow_html=True)
+with col3:
+    st.markdown(f'<div class="metric-box"><div class="metric-title">🏫 Likely Streams</div><div class="metric-value">{int(school_data["LikelyStreams"])}</div></div>', unsafe_allow_html=True)
 
-for col, (title, key) in zip(cols, metric_config):
-    with col:
-        value = int(school_data[key])
-        st.markdown(f'''
-            <div class="metric-box">
-                <div class="metric-title">{title}</div>
-                <div class="metric-value">{value:,}</div>
-            </div>
-        ''', unsafe_allow_html=True)
-
-# ====================== NEW SUBJECT TABLE ======================
+# Subject Data Display
 st.markdown("---")
-st.subheader("📚 Subject-Specific Teacher Analysis")
+col_left, col_right = st.columns(2)
 
-# Calculate required teachers for table
-streams = school_data["LikelyStreams"]
-required_teachers = {
-    subject: math.ceil(streams * load)
-    for subject, load in subject_teacher_per_class.items()
-}
+with col_left:
+    st.subheader("👨🏫 Current Teacher Allocation")
+    actual_df = pd.DataFrame.from_dict(school_data['ActualTeachers'], orient='index', columns=['Teachers'])
+    st.dataframe(
+        actual_df.style.highlight_max(axis=0, color='#c8e6c9'),
+        use_container_width=True,
+        height=400
+    )
 
-# Create combined dataframe
+with col_right:
+    st.subheader("⚠️ Teacher Shortages")
+    shortage_df = pd.DataFrame.from_dict(school_data['SubjectShortages'], orient='index', columns=['Shortage'])
+    st.dataframe(
+        shortage_df.style.applymap(lambda x: 'background-color: #ffcdd2' if x > 0 else ''),
+        use_container_width=True,
+        height=400
+    )
+
+# Create table using existing data
 subject_table = pd.DataFrame({
-    'Subject': list(subject_lessons.keys()),
-    'Actual Teachers': [school_data['ActualTeachers'].get(subj, 0) for subj in subject_lessons],
-    'Required Teachers': [required_teachers[subj] for subj in subject_lessons],
-    'Shortage': [school_data['SubjectShortages'][subj] for subj in subject_lessons]
+    'Subject': list(school_data['ActualTeachers'].keys()),
+    'Actual Teachers': list(school_data['ActualTeachers'].values()),
+    'Required Teachers': [math.ceil(school_data["LikelyStreams"] * subject_teacher_per_class[subj]) 
+                         for subj in school_data['ActualTeachers'].keys()],
+    'Shortage': list(school_data['SubjectShortages'].values())
 })
 
-# Style the dataframe
-def style_shortage(val):
-    color = 'gold' if val == 0 else 'red' if val > 0 else 'green'
-    return f'color: {color}; font-weight: bold'
-
-styled_table = subject_table.style.map(
-    style_shortage, subset=['Shortage']
-).set_properties(**{
-    'background-color': 'white',
-    'border': '1px solid navy'
-}).hide_index()
-
-# Display the styled table
+# Display with native Streamlit styling
 st.dataframe(
-    styled_table,
+    subject_table.style.applymap(
+        lambda x: "color: #D4AF37" if x == 0 else "color: #002366" if x < 0 else "color: #AA0000",
+        subset=['Shortage']
+    ),
     use_container_width=True,
-    height=600
+    height=400
 )
+
+
+
+
+
+
+
+
+
+
+
 
 # Recommendation Section
 st.markdown("---")
-st.markdown(f'''
-    <div class="recommendation">
-        <h3 style='color: var(--navy); margin-bottom: 0.5rem;'>📋 Staffing Recommendation</h3>
-        <p style='font-size: 1.1rem;'>{school_data["Recommendation"]}</p>
-    </div>
-''', unsafe_allow_html=True)
+st.markdown(f'<div class="recommendation"><h3>📋 Staffing Recommendation</h3><p>{school_data["Recommendation"]}</p></div>', unsafe_allow_html=True)
