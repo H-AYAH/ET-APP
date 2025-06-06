@@ -12,7 +12,7 @@ st.markdown("""
 <style>
     .main {background-color: #f5f7fb;}
     .header {color: white; padding: 2rem; background: linear-gradient(90deg, #4b6cb7 0%, #182848 100%);}
-    .metric-box {padding: 1.5rem; border-radius: 10px; background: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1);}
+    .metric-box {padding: 1.5rem; border-radius: 10px; background: gold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);}
     .highlight {color: #4b6cb7; font-weight: 700;}
     .recommendation {padding: 1.5rem; background: #e8f0fe; border-radius: 10px; margin-top: 1.5rem;}
     .teacher-detail {padding: 1rem; background: #f8f9fa; border-radius: 8px; margin: 0.5rem 0;}
@@ -41,7 +41,7 @@ def load_and_process_data():
         'TOD': 'first', 
         'CBE': 'first',
         'CountyName': 'first',
-        'Role': 'first',
+        'Role': list,
     }
     
     df = df.groupby('Institution_Name').agg(agg_funcs).reset_index()
@@ -224,7 +224,7 @@ def calculate_enhanced_shortage_analysis(school_row):
 # Main App
 def main():
     # Header
-    st.markdown('<div class="header"><h1>📚 Enhanced Teacher Shortage Dashboard</h1><p>Advanced Analysis with Subject Mapping & Teacher Details</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="header"><h1>📚 Teacher Shortage Dashboard</h1><p>Advanced Analysis with Subject Mapping & Teacher Details</p></div>', unsafe_allow_html=True)
     
     # Load data
     with st.spinner("Loading school data..."):
