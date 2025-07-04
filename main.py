@@ -12,9 +12,9 @@ st.markdown("""
 <style>
     .main {background-color: #f5f7fb;}
     .header {color: white; padding: 2rem; background: linear-gradient(90deg, #4b6cb7 0%, #182848 100%);}
-    .metric-box {padding: 1.5rem; border-radius: 10px; background: gold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);}
-    .highlight {color: #4b6cb7; font-weight: 700;}
-    .recommendation {padding: 1.5rem; background: #e8f0fe; border-radius: 10px; margin-top: 1.5rem;}
+    .metric-box {padding: 1.5rem; border-radius: 10px; background: #e3f2fd; box-shadow: 0 4px 6px rgba(0,0,0,0.1);}
+    .highlight {color: #0d47a1; font-weight: 700;}
+    .recommendation {padding: 1.5rem; background: #e3f2fd; border-radius: 10px; margin-top: 1.5rem;}
     .teacher-detail {padding: 1rem; background: #f8f9fa; border-radius: 8px; margin: 0.5rem 0;}
 </style>
 """, unsafe_allow_html=True)
@@ -356,12 +356,15 @@ def main():
     st.markdown(f'<div class="recommendation"><h3>📋 Staffing Recommendation</h3><p>{analysis["Recommendation"]}</p></div>', unsafe_allow_html=True)
     
     # County-wide Analysis Option
+    def county_wide_analysis(df, analysis):
     st.markdown("---")
     if st.button("🗺️ View County-wide Analysis"):
-        county_schools = df[df['CountyName'] == analysis['County']]
+        county_name = analysis['County']
+        county_schools = df[df['CountyName'] == county_name]
+
         if len(county_schools) > 1:
-            st.subheader(f"Schools in {analysis['County']} County")
-            
+            st.subheader(f"Schools in {county_name} County")
+
             county_analysis = []
             for _, school in county_schools.iterrows():
                 school_analysis = calculate_enhanced_shortage_analysis(school)
@@ -372,10 +375,46 @@ def main():
                         'Total_Shortage': school_analysis['TotalShortage'],
                         'Policy_CBE': school_analysis['PolicyCBE']
                     })
-            
+
             if county_analysis:
                 county_df = pd.DataFrame(county_analysis)
                 st.dataframe(county_df, use_container_width=True)
+
+                # 🔽 School selection
+                school_list = county_df['School'].tolist()
+                selected_school = st.selectbox("📌 Select a School to View Detailed Info", school_list)
+
+                if selected_school:
+                    selected_school_row = county_schools[county_schools['Institution_Name'] == selected_school]
+                    if not selected_school_row.empty:
+                        st.markdown("---")
+                        st.subheader(f"📊 Dashboard for {selected_school}")
+
+                        # Run same detailed analysis function
+                        detailed_info = calculate_enhanced_shortage_analysis(selected_school_row.iloc[0])
+
+                        if detailed_info:
+                            col1, col2, col3, col4 = st.columns(4)
+                            with col1:
+                                st.markdown(f'<div class="metric-box"><h3>📊 Enrollment</h3><p class="highlight">{detailed_info["Enrollment"]:,}</p></div>', unsafe_allow_html=True)
+                            with col2:
+                                st.markdown(f'<div class="metric-box"><h3>📌 Policy CBE</h3><p class="highlight">{detailed_info["PolicyCBE"]}</p></div>', unsafe_allow_html=True)
+                            with col3:
+                                st.markdown(f'<div class="metric-box"><h3>🏫 Policy Streams</h3><p class="highlight">{detailed_info["PolicyStreams"]}</p></div>', unsafe_allow_html=True)
+                            with col4:
+                                st.markdown(f'<div class="metric-box"><h3>⚠️ Total Shortage</h3><p class="highlight">{int(detailed_info["TotalShortage"])}</p></div>', unsafe_allow_html=True)
+
+                            st.markdown("---")
+
+                            st.subheader("🏷️ Select Role in School")
+                            roles = selected_school_row.iloc[0]['Role']
+                            if isinstance(roles, list):
+                                selected_role = st.selectbox("Available Roles", roles)
+                                st.info(f"Selected Role: {selected_role}")
+                            else:
+                                st.info(f"Available Role: {roles}")
+                    else:
+                        st.warning("Selected school not found in data.")
         else:
             st.info("Only one school found in this county.")
 
